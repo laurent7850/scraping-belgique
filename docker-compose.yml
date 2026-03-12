@@ -1,0 +1,20 @@
+services:
+  scraping-web:
+    build: .
+    container_name: scraping-belgique
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - scraping-output:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  scraping-output:

@@ -1,0 +1,246 @@
+/* ========================================
+   Scraping Professions Belgique — Styles
+   ======================================== */
+
+/* --- General --- */
+body {
+    background-color: #f5f7fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.navbar {
+    background: linear-gradient(135deg, #1a56db, #2563eb) !important;
+}
+
+.card {
+    border-radius: 12px;
+    transition: box-shadow 0.2s;
+}
+
+.card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* --- Steps Progress --- */
+.steps-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 10px 0;
+}
+
+.step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+
+.step-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.4s ease;
+    border: 2px solid transparent;
+}
+
+.step-item.active .step-icon {
+    background-color: #e8f0fe;
+    color: #1a56db;
+    border-color: #1a56db;
+    animation: pulse 1.5s infinite;
+}
+
+.step-item.completed .step-icon {
+    background-color: #198754;
+    color: white;
+    border-color: #198754;
+}
+
+.step-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-top: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.step-item.active .step-label {
+    color: #1a56db;
+    font-weight: 600;
+}
+
+.step-item.completed .step-label {
+    color: #198754;
+    font-weight: 600;
+}
+
+.step-connector {
+    height: 2px;
+    width: 40px;
+    background-color: #e9ecef;
+    margin: 0 4px;
+    margin-bottom: 20px;
+    transition: background-color 0.4s ease;
+}
+
+.step-connector.completed {
+    background-color: #198754;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+}
+
+/* --- Progress Log --- */
+.progress-log {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    background-color: #f8f9fa !important;
+}
+
+.progress-log .log-entry {
+    padding: 2px 6px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.progress-log .log-entry:last-child {
+    border-bottom: none;
+}
+
+.progress-log .log-time {
+    color: #6c757d;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.progress-log .log-msg {
+    color: #333;
+}
+
+.progress-log .log-entry.step-done .log-msg {
+    color: #198754;
+    font-weight: 500;
+}
+
+/* --- Results Table --- */
+.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.sortable.sorted-asc i.bi::before {
+    content: "\F127";  /* bi-arrow-up */
+}
+
+.sortable.sorted-desc i.bi::before {
+    content: "\F124";  /* bi-arrow-down */
+}
+
+#results-table td {
+    vertical-align: middle;
+    font-size: 0.9rem;
+}
+
+#results-table a {
+    text-decoration: none;
+}
+
+#results-table a:hover {
+    text-decoration: underline;
+}
+
+/* --- Stats Cards --- */
+#stats-cards .card {
+    border-radius: 12px;
+}
+
+#stats-cards .fs-2 {
+    line-height: 1.2;
+}
+
+/* --- Country Selector --- */
+.country-selector {
+    display: flex;
+    gap: 8px;
+}
+
+.country-btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: 2px solid #dee2e6;
+    border-radius: 10px;
+    background: #fff;
+    color: #495057;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: all 0.25s ease;
+    cursor: pointer;
+}
+
+.country-btn:hover {
+    border-color: #1a56db;
+    color: #1a56db;
+    background: #f0f4ff;
+}
+
+.country-btn.active {
+    border-color: #1a56db;
+    background: linear-gradient(135deg, #e8f0fe, #dbeafe);
+    color: #1a56db;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(26, 86, 219, 0.15);
+}
+
+.country-flag {
+    font-size: 1.2rem;
+    margin-right: 4px;
+}
+
+/* --- Range Slider --- */
+.form-range::-webkit-slider-thumb {
+    background: #1a56db;
+}
+
+.form-range::-moz-range-thumb {
+    background: #1a56db;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .steps-container {
+        gap: 0;
+    }
+
+    .step-connector {
+        width: 20px;
+    }
+
+    .step-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 0.9rem;
+    }
+
+    .step-label {
+        font-size: 0.6rem;
+    }
+
+    #stats-cards .fs-2 {
+        font-size: 1.5rem !important;
+    }
+}

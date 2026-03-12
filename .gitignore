@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.csv
+*.xlsx
+*.json
+!requirements.txt
+output/
+*.b64
+*.zip
+.claude/
