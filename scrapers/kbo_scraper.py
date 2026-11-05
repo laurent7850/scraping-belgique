@@ -134,6 +134,7 @@ class KBOScraper:
             "_vest": "on",
             "filterEnkelActieve": "true",
             "_filterEnkelActieve": "on",
+            "actionLu": "Recherche",
         }
 
         if page > 1:

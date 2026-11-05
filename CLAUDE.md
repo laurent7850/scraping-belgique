@@ -26,12 +26,19 @@ Service de web scraping des professions en Belgique. Récupère les données des
   - `templates/` — Templates Jinja2
   - `static/` — CSS + JS
 
+## Secrets
+- **Gestion** : 1Password (coffre `Dev - Claude`), injectés via `op run --env-file=.env.op`
+- **Items** :
+  - `Scraping Belgique - Basic Auth` — identifiants Traefik basic auth (accès HTTPS public)
+  - `Scraping Belgique - CBEAPI` — clés API CBEAPI (enrichissement entreprises)
+- **Pas de `.env` en clair** — utiliser `.env.op` avec références `op://`
+
 ## Commandes locales
 ```bash
-python main.py --profession plombier --ville Bruxelles       # CLI
-python main.py --profession avocat --province Liège --limit 50
-python main.py --list-professions                             # Lister les professions
-python -m web.app                                             # Serveur web local
+op run --env-file=.env.op -- python main.py --profession plombier --ville Bruxelles
+op run --env-file=.env.op -- python main.py --profession avocat --province Liège --limit 50
+python main.py --list-professions                             # Pas de secrets nécessaires
+op run --env-file=.env.op -- python -m web.app                # Serveur web local
 docker compose up -d                                          # Via Docker local
 ```
 
@@ -39,7 +46,7 @@ docker compose up -d                                          # Via Docker local
 
 ### Infrastructure
 - **VPS** : Hostinger `193.203.191.251` (srv767464.hstgr.cloud)
-- **URL** : `https://scraping.srv767464.hstgr.cloud`
+- **URL** : `https://scraping.srv767464.hstgr.cloud` (basic auth Traefik, creds dans 1Password)
 - **Repo** : `github.com/laurent7850/scraping-belgique` (privé)
 - **Container** : `scraping-belgique-web-1` (Python 3.12-slim)
 - **Reverse proxy** : Traefik (réseau `root_default`)
