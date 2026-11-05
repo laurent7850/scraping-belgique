@@ -22,11 +22,13 @@ ENTREPRISES_API_DELAY_MIN = 0.3
 ENTREPRISES_API_DELAY_MAX = 1.0
 
 # Enrichissement email (délais supplémentaires)
-WEBSITE_CRAWL_DELAY_MIN = 1.5
-WEBSITE_CRAWL_DELAY_MAX = 3.0
-WEBSITE_CRAWL_TIMEOUT = 10  # secondes
-GOOGLE_SEARCH_DELAY_MIN = 3.0
-GOOGLE_SEARCH_DELAY_MAX = 6.0
+WEBSITE_CRAWL_DELAY_MIN = 0.5
+WEBSITE_CRAWL_DELAY_MAX = 1.5
+WEBSITE_CRAWL_TIMEOUT = 6  # secondes
+GOOGLE_SEARCH_DELAY_MIN = 2.0
+GOOGLE_SEARCH_DELAY_MAX = 4.0
+GOOGLE_MAPS_DELAY_MIN = 1.0
+GOOGLE_MAPS_DELAY_MAX = 2.5
 
 # --- URLs Belgique ---
 KBO_SEARCH_URL = "https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html"
@@ -104,4 +106,6 @@ def get_random_delay(source: str = "pagesdor") -> float:
         return random.uniform(WEBSITE_CRAWL_DELAY_MIN, WEBSITE_CRAWL_DELAY_MAX)
     elif source == "google":
         return random.uniform(GOOGLE_SEARCH_DELAY_MIN, GOOGLE_SEARCH_DELAY_MAX)
+    elif source == "google_maps":
+        return random.uniform(GOOGLE_MAPS_DELAY_MIN, GOOGLE_MAPS_DELAY_MAX)
     return random.uniform(1.0, 2.0)

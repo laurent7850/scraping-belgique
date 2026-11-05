@@ -24,6 +24,8 @@ from config import (
 )
 from models import Professional
 
+GOOGLE_MAPS_SEARCH_URL = "https://www.google.com/maps/search/"
+
 logger = logging.getLogger(__name__)
 
 # Pattern email robuste (filtre les faux positifs courants)
@@ -80,8 +82,10 @@ class EmailEnricher:
         self.use_website_crawl = use_website_crawl
         self.use_google_search = use_google_search
         self.country = country
+        self.use_google_maps = True
         self.stats = {
             "total_processed": 0,
+            "email_found_google_maps": 0,
             "email_found_pagesdor": 0,
             "email_found_website": 0,
             "email_found_google": 0,
@@ -122,28 +126,36 @@ class EmailEnricher:
         return emails_found
 
     def _find_email(self, prof: Professional) -> str:
-        """Essaie les 3 stratégies pour trouver un email.
+        """Essaie les stratégies pour trouver un email.
 
         Ordre de priorité :
-        1. Pages d'Or detail (le plus fiable)
-        2. Site web entreprise (très fiable)
-        3. Google Search (fallback)
+        1. Google Maps (rapide, une seule requête, souvent complet)
+        2. Pages d'Or detail (fiable pour la Belgique)
+        3. Site web entreprise (crawl accueil + contact)
+        4. Google Search (fallback)
         """
-        # Stratégie 1 : Pages d'Or page détail
+        # Stratégie 1 : Google Maps
+        if self.use_google_maps and prof.nom:
+            email = self._try_google_maps(prof)
+            if email:
+                self.stats["email_found_google_maps"] += 1
+                return email
+
+        # Stratégie 2 : Pages d'Or page détail
         if self.use_pagesdor_detail and prof.detail_url:
             email = self._try_pagesdor_detail(prof)
             if email:
                 self.stats["email_found_pagesdor"] += 1
                 return email
 
-        # Stratégie 2 : Crawl du site web de l'entreprise
+        # Stratégie 3 : Crawl du site web de l'entreprise
         if self.use_website_crawl and prof.site_web:
             email = self._try_website_crawl(prof)
             if email:
                 self.stats["email_found_website"] += 1
                 return email
 
-        # Stratégie 3 : Google Search
+        # Stratégie 4 : Google Search
         if self.use_google_search and prof.nom:
             email = self._try_google_search(prof)
             if email:
@@ -153,7 +165,95 @@ class EmailEnricher:
         return ""
 
     # ===================================================================
-    # Stratégie 1 : Pages d'Or - Page détail
+    # Stratégie 1 : Google Maps
+    # ===================================================================
+
+    def _try_google_maps(self, prof: Professional) -> str:
+        """Cherche l'entreprise sur Google Maps pour extraire l'email."""
+        query_parts = [prof.nom]
+        if prof.ville:
+            query_parts.append(prof.ville)
+        elif prof.code_postal:
+            query_parts.append(prof.code_postal)
+        query = " ".join(query_parts)
+
+        try:
+            time.sleep(get_random_delay("google_maps"))
+
+            url = GOOGLE_MAPS_SEARCH_URL
+            params = {"api": "1", "query": query}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "fr-BE,fr;q=0.9,en;q=0.5",
+            }
+
+            resp = self.session.get(
+                url, params=params, headers=headers,
+                timeout=WEBSITE_CRAWL_TIMEOUT, allow_redirects=True,
+            )
+
+            if resp.status_code != 200:
+                return ""
+
+            text = resp.text
+
+            emails = self._extract_emails_from_text(text)
+            if emails:
+                company_words = set(w.lower() for w in prof.nom.split() if len(w) > 2)
+                best = self._score_and_pick_email(emails, company_words)
+                if best:
+                    logger.debug(f"Google Maps: email trouvé pour '{prof.nom}': {best}")
+                    return best
+
+            if not prof.site_web:
+                site_match = re.search(
+                    r'"(https?://(?:www\.)?[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}[^"]*)"',
+                    text,
+                )
+                if site_match:
+                    site = site_match.group(1)
+                    parsed = urlparse(site)
+                    if parsed.netloc and "google" not in parsed.netloc:
+                        prof.site_web = site
+                        logger.debug(f"Google Maps: site web trouvé pour '{prof.nom}': {site}")
+
+            if not prof.telephone:
+                phone_match = re.search(
+                    r'(\+32\s?\d[\d\s]{7,}|\b0[1-9][\d\s/\.\-]{7,})',
+                    text,
+                )
+                if phone_match:
+                    phone = re.sub(r'[\s/\.\-]', '', phone_match.group(1))
+                    if len(phone) >= 9:
+                        prof.telephone = phone_match.group(1).strip()
+
+        except Exception as e:
+            logger.debug(f"Google Maps error: {e}")
+
+        return ""
+
+    def _score_and_pick_email(self, emails: list[str], company_words: set[str]) -> str:
+        """Score and pick the best email from a list."""
+        scored = []
+        for email in emails:
+            domain = email.split("@")[1].split(".")[0].lower()
+            local = email.split("@")[0].lower()
+            score = 0
+            for word in company_words:
+                if word in domain:
+                    score += 5
+                if word in local:
+                    score += 2
+            generic_prefixes = ["info", "contact", "office", "admin", "hello"]
+            if any(local.startswith(p) for p in generic_prefixes):
+                score += 3
+            scored.append((email, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[0][0] if scored else ""
+
+    # ===================================================================
+    # Stratégie 2 : Pages d'Or - Page détail
     # ===================================================================
 
     def _try_pagesdor_detail(self, prof: Professional) -> str:
@@ -248,108 +348,89 @@ class EmailEnricher:
         if not site_url.startswith("http"):
             site_url = "https://" + site_url
 
-        # Page 1 : Accueil
-        email = self._crawl_page_for_email(site_url)
-        if email:
-            return email
-
-        # Page 2 : /contact (et variantes)
-        contact_paths = ["/contact", "/contactez-nous", "/contact-us", "/nous-contacter"]
-        for path in contact_paths:
-            contact_url = urljoin(site_url, path)
-            email = self._crawl_page_for_email(contact_url)
-            if email:
-                return email
-
-        # Page 3 : Chercher un lien "Contact" dans la page d'accueil
-        contact_url = self._find_contact_page(site_url)
-        if contact_url:
-            email = self._crawl_page_for_email(contact_url)
-            if email:
-                return email
-
-        return ""
-
-    def _crawl_page_for_email(self, url: str) -> str:
-        """Visite une page et extrait les emails.
-
-        Cherche en priorité :
-        1. Liens mailto:
-        2. Emails dans le texte visible
-        """
+        # Page 1 : Accueil — extraire email + chercher lien contact
         try:
             time.sleep(get_random_delay("website"))
-            resp = self.session.get(
-                url,
-                timeout=WEBSITE_CRAWL_TIMEOUT,
-                allow_redirects=True,
-            )
-
+            resp = self.session.get(site_url, timeout=WEBSITE_CRAWL_TIMEOUT, allow_redirects=True)
             if resp.status_code != 200:
                 return ""
-
-            # Vérifier que c'est du HTML
             content_type = resp.headers.get("content-type", "")
             if "text/html" not in content_type.lower():
                 return ""
 
             soup = BeautifulSoup(resp.text, "lxml")
+            email = self._extract_email_from_soup(soup, site_url)
+            if email:
+                return email
 
-            # 1. Liens mailto:
-            for mailto in soup.find_all("a", href=re.compile(r"^mailto:", re.I)):
-                email = mailto["href"].replace("mailto:", "").split("?")[0].strip()
-                if self._is_valid_email(email):
-                    logger.debug(f"Email trouvé (mailto) sur {url}: {email}")
-                    return email.lower()
+            # Page 2 : chercher un lien contact dans la page déjà chargée
+            contact_url = self._find_contact_link(soup, site_url)
+            if contact_url:
+                email = self._crawl_page_for_email(contact_url)
+                if email:
+                    return email
 
-            # 2. Texte de la page complète
-            page_text = soup.get_text(separator=" ")
-            emails = self._extract_emails_from_text(page_text)
-            if emails:
-                # Prioriser les emails du domaine du site
-                domain = urlparse(url).netloc.replace("www.", "")
-                domain_emails = [e for e in emails if domain.split(".")[0] in e]
-                if domain_emails:
-                    logger.debug(f"Email trouvé (domain match) sur {url}: {domain_emails[0]}")
-                    return domain_emails[0]
+            # Page 3 : fallback /contact
+            contact_url = urljoin(site_url, "/contact")
+            email = self._crawl_page_for_email(contact_url)
+            if email:
+                return email
 
-                logger.debug(f"Email trouvé (texte) sur {url}: {emails[0]}")
-                return emails[0]
-
-        except requests.Timeout:
-            logger.debug(f"Timeout lors du crawl de {url}")
-        except requests.ConnectionError:
-            logger.debug(f"Connexion échouée pour {url}")
+        except (requests.Timeout, requests.ConnectionError):
+            pass
         except Exception as e:
-            logger.debug(f"Erreur crawl {url}: {e}")
+            logger.debug(f"Website crawl error: {e}")
 
         return ""
 
-    def _find_contact_page(self, base_url: str) -> str:
-        """Cherche un lien vers la page Contact dans la page d'accueil."""
+    def _extract_email_from_soup(self, soup: BeautifulSoup, url: str) -> str:
+        """Extrait un email depuis un soup BeautifulSoup déjà parsé."""
+        for mailto in soup.find_all("a", href=re.compile(r"^mailto:", re.I)):
+            email = mailto["href"].replace("mailto:", "").split("?")[0].strip()
+            if self._is_valid_email(email):
+                logger.debug(f"Email trouvé (mailto) sur {url}: {email}")
+                return email.lower()
+
+        page_text = soup.get_text(separator=" ")
+        emails = self._extract_emails_from_text(page_text)
+        if emails:
+            domain = urlparse(url).netloc.replace("www.", "")
+            domain_emails = [e for e in emails if domain.split(".")[0] in e]
+            if domain_emails:
+                return domain_emails[0]
+            return emails[0]
+
+        return ""
+
+    def _crawl_page_for_email(self, url: str) -> str:
+        """Visite une page et extrait les emails."""
         try:
-            resp = self.session.get(base_url, timeout=WEBSITE_CRAWL_TIMEOUT)
+            time.sleep(get_random_delay("website"))
+            resp = self.session.get(url, timeout=WEBSITE_CRAWL_TIMEOUT, allow_redirects=True)
             if resp.status_code != 200:
                 return ""
-
+            content_type = resp.headers.get("content-type", "")
+            if "text/html" not in content_type.lower():
+                return ""
             soup = BeautifulSoup(resp.text, "lxml")
-
-            # Chercher des liens avec "contact" dans le texte ou l'URL
-            contact_keywords = ["contact", "contactez", "nous contacter", "kontakt"]
-            for link in soup.find_all("a", href=True):
-                text = link.get_text(strip=True).lower()
-                href = link["href"].lower()
-
-                for kw in contact_keywords:
-                    if kw in text or kw in href:
-                        full_url = urljoin(base_url, link["href"])
-                        # Vérifier que c'est le même domaine
-                        if urlparse(full_url).netloc == urlparse(base_url).netloc:
-                            return full_url
-
-        except Exception:
+            return self._extract_email_from_soup(soup, url)
+        except (requests.Timeout, requests.ConnectionError):
             pass
+        except Exception as e:
+            logger.debug(f"Erreur crawl {url}: {e}")
+        return ""
 
+    def _find_contact_link(self, soup: BeautifulSoup, base_url: str) -> str:
+        """Cherche un lien contact dans un soup déjà parsé."""
+        contact_keywords = ["contact", "contactez", "nous contacter", "kontakt"]
+        for link in soup.find_all("a", href=True):
+            text = link.get_text(strip=True).lower()
+            href = link["href"].lower()
+            for kw in contact_keywords:
+                if kw in text or kw in href:
+                    full_url = urljoin(base_url, link["href"])
+                    if urlparse(full_url).netloc == urlparse(base_url).netloc:
+                        return full_url
         return ""
 
     # ===================================================================
@@ -445,38 +526,11 @@ class EmailEnricher:
         emails = self._extract_emails_from_text(full_text)
 
         if emails:
-            # Essayer de faire correspondre avec le nom de l'entreprise
-            company_words = set(prof.nom.lower().split())
-            scored_emails = []
-            for email in emails:
-                domain = email.split("@")[1].split(".")[0].lower()
-                local = email.split("@")[0].lower()
-
-                score = 0
-                # Bonus si le domaine correspond à un mot du nom
-                for word in company_words:
-                    if len(word) > 2 and word in domain:
-                        score += 5
-                    if len(word) > 2 and word in local:
-                        score += 2
-
-                # Préférer les emails génériques d'entreprise
-                generic_prefixes = ["info", "contact", "office", "admin", "hello"]
-                if any(local.startswith(p) for p in generic_prefixes):
-                    score += 3
-
-                scored_emails.append((email, score))
-
-            # Trier par score décroissant
-            scored_emails.sort(key=lambda x: x[1], reverse=True)
-
-            best = scored_emails[0]
-            if best[1] >= 2:
-                logger.debug(f"Google: Email trouvé '{best[0]}' (score: {best[1]})")
-                return best[0]
-
-            # Si aucun bon score, retourner le premier quand même
-            return scored_emails[0][0]
+            company_words = set(w.lower() for w in prof.nom.split() if len(w) > 2)
+            best = self._score_and_pick_email(emails, company_words)
+            if best:
+                logger.debug(f"Google: Email trouvé '{best}'")
+                return best
 
         return ""
 
