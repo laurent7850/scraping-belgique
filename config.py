@@ -93,19 +93,33 @@ def get_headers(country: str = "BE") -> dict:
     }
 
 
+def _human_delay(low: float, high: float) -> float:
+    """Generate a human-like delay using a skewed distribution.
+
+    Most delays cluster near the low end (fast browsing) with occasional
+    longer pauses (reading, distraction), plus rare micro-bursts.
+    """
+    base = random.gammavariate(2.0, (low + high) / 4.0)
+    base = max(low, min(base, high * 1.5))
+    jitter = random.uniform(-0.3, 0.5)
+    if random.random() < 0.1:
+        base += random.uniform(2.0, 5.0)
+    return max(low * 0.8, base + jitter)
+
+
 def get_random_delay(source: str = "pagesdor") -> float:
     if source == "pagesdor":
-        return random.uniform(PAGESDOR_DELAY_MIN, PAGESDOR_DELAY_MAX)
+        return _human_delay(PAGESDOR_DELAY_MIN, PAGESDOR_DELAY_MAX)
     elif source == "kbo":
-        return random.uniform(KBO_DELAY_MIN, KBO_DELAY_MAX)
+        return _human_delay(KBO_DELAY_MIN, KBO_DELAY_MAX)
     elif source == "pagesjaunes":
-        return random.uniform(PAGESJAUNES_DELAY_MIN, PAGESJAUNES_DELAY_MAX)
+        return _human_delay(PAGESJAUNES_DELAY_MIN, PAGESJAUNES_DELAY_MAX)
     elif source == "entreprises_api":
-        return random.uniform(ENTREPRISES_API_DELAY_MIN, ENTREPRISES_API_DELAY_MAX)
+        return _human_delay(ENTREPRISES_API_DELAY_MIN, ENTREPRISES_API_DELAY_MAX)
     elif source == "website":
-        return random.uniform(WEBSITE_CRAWL_DELAY_MIN, WEBSITE_CRAWL_DELAY_MAX)
+        return _human_delay(WEBSITE_CRAWL_DELAY_MIN, WEBSITE_CRAWL_DELAY_MAX)
     elif source == "google":
-        return random.uniform(GOOGLE_SEARCH_DELAY_MIN, GOOGLE_SEARCH_DELAY_MAX)
+        return _human_delay(GOOGLE_SEARCH_DELAY_MIN, GOOGLE_SEARCH_DELAY_MAX)
     elif source == "google_maps":
-        return random.uniform(GOOGLE_MAPS_DELAY_MIN, GOOGLE_MAPS_DELAY_MAX)
-    return random.uniform(1.0, 2.0)
+        return _human_delay(GOOGLE_MAPS_DELAY_MIN, GOOGLE_MAPS_DELAY_MAX)
+    return _human_delay(1.0, 2.0)
