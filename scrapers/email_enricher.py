@@ -193,10 +193,20 @@ class EmailEnricher:
                 timeout=WEBSITE_CRAWL_TIMEOUT, allow_redirects=True,
             )
 
+            if resp.status_code == 429:
+                logger.warning("Google Maps: rate limit (429). Pause 30s.")
+                time.sleep(30)
+                return ""
+
             if resp.status_code != 200:
                 return ""
 
             text = resp.text
+
+            if "captcha" in text.lower() or "unusual traffic" in text.lower():
+                logger.warning("Google Maps: CAPTCHA détecté. Pause 60s.")
+                time.sleep(60)
+                return ""
 
             emails = self._extract_emails_from_text(text)
             if emails:
@@ -478,12 +488,17 @@ class EmailEnricher:
             )
 
             if resp.status_code == 429:
-                logger.warning("Google Search: Rate limit atteint. Pause de 60s.")
+                logger.warning("Google Search: rate limit (429). Pause 60s.")
                 time.sleep(60)
                 return ""
 
             if resp.status_code != 200:
                 logger.debug(f"Google Search: HTTP {resp.status_code}")
+                return ""
+
+            if "captcha" in resp.text.lower() or "unusual traffic" in resp.text.lower():
+                logger.warning("Google Search: CAPTCHA détecté. Pause 60s.")
+                time.sleep(60)
                 return ""
 
             return self._parse_google_results(resp.text, prof)
