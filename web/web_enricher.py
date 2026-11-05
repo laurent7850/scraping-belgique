@@ -57,14 +57,17 @@ class WebEnricher:
         pagesdor_keyword: str = "",
         nace_code: str = "",
         location: str = "",
+        kbo_location: str = "",
         max_results: int = 100,
     ) -> list[Professional]:
         """Recherche et enrichit les professionnels (version web)."""
         all_professionals = []
 
         # Étape 1 : Recherche KBO
-        self._notify("kbo", 0, 1, "Recherche KBO/BCE en cours...")
-        kbo_results = self._search_kbo(keyword, nace_code, location, max_results)
+        # kbo_location = province si sélectionnée, sinon location (ville/cp)
+        effective_kbo_location = kbo_location or location
+        self._notify("kbo", 0, 1, f"Recherche KBO/BCE ({effective_kbo_location or 'tout le pays'})...")
+        kbo_results = self._search_kbo(keyword, nace_code, effective_kbo_location, max_results)
         self._notify("kbo", 1, 1, f"KBO : {len(kbo_results)} résultats trouvés")
 
         # Étape 2 : Recherche Pages d'Or

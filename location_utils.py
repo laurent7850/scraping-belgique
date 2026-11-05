@@ -200,6 +200,43 @@ BELGIAN_CITY_POSTCODES: dict[str, list[str]] = {
 }
 
 
+PROVINCE_POSTAL_RANGES: dict[str, list[str]] = {
+    "bruxelles": [str(c) for c in range(1000, 1300, 10)],
+    "brabant wallon": [str(c) for c in range(1300, 1500, 20)],
+    "brabant flamand": [str(c) for c in range(1500, 2000, 50)] + [str(c) for c in range(3000, 3500, 50)],
+    "anvers": [str(c) for c in range(2000, 3000, 50)],
+    "limbourg": [str(c) for c in range(3500, 4000, 50)],
+    "liège": [str(c) for c in range(4000, 5000, 50)],
+    "namur": [str(c) for c in range(5000, 6000, 50)],
+    "hainaut": [str(c) for c in range(6000, 6600, 50)] + [str(c) for c in range(7000, 8000, 50)],
+    "luxembourg": [str(c) for c in range(6600, 7000, 50)],
+    "flandre occidentale": [str(c) for c in range(8000, 9000, 50)],
+    "flandre orientale": [str(c) for c in range(9000, 10000, 50)],
+}
+
+
+def is_province(location: str) -> bool:
+    """Check if a location string is a Belgian province name."""
+    return location.lower().strip() in PROVINCE_POSTAL_RANGES
+
+
+def get_postal_codes_for_location(location: str) -> list[str]:
+    """Get postal codes for a city, postal code, or province.
+
+    Returns a list suitable for iterative KBO searches.
+    """
+    if not location:
+        return []
+
+    key = location.lower().strip()
+
+    if key in PROVINCE_POSTAL_RANGES:
+        return PROVINCE_POSTAL_RANGES[key]
+
+    _, codes = resolve_location(location)
+    return codes
+
+
 def resolve_location(location: str) -> tuple[str, list[str]]:
     """Resolve a location string to a city name and list of postal codes.
 

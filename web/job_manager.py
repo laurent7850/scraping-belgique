@@ -30,6 +30,7 @@ class Job:
     country: str = "BE"  # "BE" ou "FR"
     profession: str = ""
     location: str = ""
+    province: str = ""
     max_results: int = 100
     use_enrich: bool = True
     use_deep_email: bool = False
@@ -83,6 +84,7 @@ class JobManager:
         self,
         profession: str,
         location: str = "",
+        province: str = "",
         max_results: int = 100,
         use_enrich: bool = True,
         use_deep_email: bool = False,
@@ -96,6 +98,7 @@ class JobManager:
             country=country,
             profession=profession,
             location=location,
+            province=province,
             max_results=max_results,
             use_enrich=use_enrich,
             use_deep_email=use_deep_email,
@@ -173,11 +176,13 @@ class JobManager:
         )
 
         try:
+            kbo_location = job.province if job.province else job.location
             professionals = enricher.search_and_enrich(
                 keyword=keyword,
                 pagesdor_keyword=pagesdor_keyword,
                 nace_code=nace_code,
                 location=job.location,
+                kbo_location=kbo_location,
                 max_results=job.max_results,
             )
 

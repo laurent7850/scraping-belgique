@@ -65,7 +65,11 @@ def create_app() -> Flask:
         if not profession:
             return jsonify({"error": "Profession requise"}), 400
 
+        ville = data.get("ville", "").strip()
+        province = data.get("province", "").strip()
         location = data.get("location", "").strip()
+        if not location:
+            location = ville or province
         max_results = min(int(data.get("max_results", 100)), 500)
         use_enrich = data.get("use_enrich", True)
         use_deep_email = data.get("use_deep_email", False)
@@ -73,9 +77,18 @@ def create_app() -> Flask:
         if country not in ("BE", "FR"):
             country = "BE"
 
+        if country == "BE" and not location:
+            from nace_codes import find_profession as _find
+            if _find(profession):
+                return jsonify({
+                    "error": "La recherche par profession (code NACE) dans KBO "
+                             "nécessite un lieu (ville, code postal ou province)."
+                }), 400
+
         job_id = job_manager.create_job(
             profession=profession,
             location=location,
+            province=province if not ville else "",
             max_results=max_results,
             use_enrich=use_enrich,
             use_deep_email=use_deep_email,

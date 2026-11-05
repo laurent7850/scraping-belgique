@@ -15,7 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from config import get_headers, get_random_delay
-from location_utils import get_primary_postal_code
+from location_utils import get_primary_postal_code, get_postal_codes_for_location, is_province
 from models import Professional
 
 logger = logging.getLogger(__name__)
@@ -79,22 +79,43 @@ class KBOScraper:
     ) -> list[Professional]:
         """Recherche par code NACE.
 
-        NOTE: L'endpoint NACE de KBO est actuellement cassé (404).
-        On tente d'abord l'endpoint activité, puis fallback sur mot-clé.
+        Supporte ville (1 code postal), province (itération sur la plage),
+        ou code postal direct.
         """
-        # Resolve city name to postal code for KBO
-        resolved_zip = get_primary_postal_code(zipcode) if zipcode else ""
-        # Tentative via le formulaire activité (nouvelle URL)
-        results = self._try_activity_search(nace_code, resolved_zip, max_results)
-        if results:
-            return results
+        postal_codes = get_postal_codes_for_location(zipcode) if zipcode else []
 
-        # Fallback: pas de résultats NACE, on log un warning
-        logger.warning(
-            f"KBO: Recherche NACE {nace_code} non disponible. "
-            "Utilisez la recherche par mot-clé à la place."
-        )
-        return []
+        if not postal_codes:
+            logger.warning(
+                f"KBO: Recherche NACE {nace_code} sans lieu — "
+                "KBO exige un code postal pour la recherche par activité."
+            )
+            return []
+
+        seen_bce: set[str] = set()
+        results: list[Professional] = []
+
+        for i in range(0, len(postal_codes), 4):
+            batch = postal_codes[i:i + 4]
+            batch_results = self._try_activity_search(nace_code, batch, max_results - len(results))
+
+            for prof in batch_results:
+                key = prof.numero_bce or prof.nom
+                if key not in seen_bce:
+                    seen_bce.add(key)
+                    results.append(prof)
+
+            logger.info(
+                f"KBO NACE: codes postaux {batch} — "
+                f"{len(batch_results)} résultats (total unique: {len(results)})"
+            )
+
+            if len(results) >= max_results:
+                break
+
+            if len(batch) > 1 or is_province(zipcode):
+                time.sleep(get_random_delay("kbo"))
+
+        return results[:max_results]
 
     def get_enterprise_details(self, enterprise_number: str) -> Professional | None:
         """Récupère les détails d'une entreprise par son numéro BCE."""
@@ -149,12 +170,13 @@ class KBOScraper:
             return []
 
     def _try_activity_search(
-        self, nace_code: str, zipcode: str, max_results: int
+        self, nace_code: str, postal_codes: list[str], max_results: int
     ) -> list[Professional]:
-        """Tente la recherche par activité NACE (peut être cassée)."""
-        url = f"{self.BASE_URL}/zoekactiviteitform.html"
+        """Recherche par activité NACE avec 1 à 4 codes postaux."""
+        if not postal_codes:
+            return []
 
-        # Nettoyer le code NACE (retirer le point)
+        url = f"{self.BASE_URL}/zoekactiviteitform.html"
         clean_nace = nace_code.replace(".", "")
 
         params = {
@@ -168,13 +190,11 @@ class KBOScraper:
             "filterEnkelActieve": "true",
             "_filterEnkelActieve": "on",
             "actionLu": "Recherche",
+            "keuzeopzloc": "postnr",
         }
 
-        if zipcode:
-            params["keuzeopzloc"] = "postnr"
-            params["postnummer1"] = zipcode
-        else:
-            params["keuzeopzloc"] = "gemeenten"
+        for i, code in enumerate(postal_codes[:4], 1):
+            params[f"postnummer{i}"] = code
 
         try:
             resp = self.session.get(url, params=params, timeout=15)
@@ -192,26 +212,19 @@ class KBOScraper:
         soup = BeautifulSoup(html, "lxml")
         professionals = []
 
-        # Chercher les lignes de résultats dans le tableau
-        result_table = soup.find("table", {"id": "result"}) or soup.find(
-            "table", class_="list"
+        result_table = (
+            soup.find("table", {"id": "onderneminglistfonetisch"})
+            or soup.find("table", {"id": "result"})
+            or soup.find("table", class_="table")
+            or soup.find("table", class_="list")
         )
 
-        if not result_table:
-            # Essayer de trouver les résultats dans des divs ou lignes alternées
-            result_rows = soup.find_all("tr", class_=re.compile(r"odd|even"))
-            if not result_rows:
-                # Essayer avec les liens vers les entreprises
-                result_rows = soup.find_all("div", class_=re.compile(r"result"))
+        if result_table:
+            rows = result_table.find_all("tr", class_=re.compile(r"odd|even"))
+        else:
+            rows = soup.find_all("tr", class_=re.compile(r"odd|even"))
 
-            for row in result_rows:
-                prof = self._parse_result_row(row)
-                if prof:
-                    professionals.append(prof)
-            return professionals
-
-        rows = result_table.find_all("tr")
-        for row in rows[1:]:  # Skip header
+        for row in rows:
             prof = self._parse_result_row(row)
             if prof:
                 professionals.append(prof)
@@ -219,53 +232,58 @@ class KBOScraper:
         return professionals
 
     def _parse_result_row(self, element) -> Professional | None:
-        """Parse une ligne de résultat."""
+        """Parse une ligne de résultat KBO.
+
+        Structure KBO: 6 colonnes
+        [0] n° ligne  [1] type/statut  [2] n° BCE  [3] vestigings  [4] nom  [5] adresse
+        """
         try:
             cells = element.find_all("td")
-            if len(cells) < 2:
-                link = element.find("a")
-                name_text = link.get_text(strip=True) if link else ""
-                if not name_text:
-                    return None
+            if len(cells) < 5:
+                return None
 
-                prof = Professional(nom=name_text, sources="KBO")
-
-                text = element.get_text()
-                bce_match = re.search(r"(\d{4}[\.\s]?\d{3}[\.\s]?\d{3})", text)
-                if bce_match:
-                    prof.numero_bce = bce_match.group(1).replace(" ", ".").strip()
-
-                return prof
-
-            # Format tableau standard
-            name_cell = cells[0]
-            link = name_cell.find("a")
-            name = link.get_text(strip=True) if link else name_cell.get_text(strip=True)
-
+            # Nom — colonne avec class "benaming" ou cells[4]
+            name_cell = element.find("td", class_="benaming") or cells[4]
+            name = name_cell.get_text(strip=True)
             if not name:
                 return None
 
             prof = Professional(nom=name, sources="KBO")
 
-            # Numéro BCE
-            if len(cells) > 1:
-                bce_text = cells[1].get_text(strip=True)
+            # N° BCE — cells[2], extraire uniquement depuis le lien <a>
+            bce_cell = cells[2]
+            bce_link = bce_cell.find("a")
+            if bce_link:
+                bce_text = bce_link.get_text(strip=True)
                 bce_match = re.search(r"(\d{4}[\.\s]?\d{3}[\.\s]?\d{3})", bce_text)
                 if bce_match:
                     prof.numero_bce = bce_match.group(1)
 
-            # Adresse
-            if len(cells) > 2:
-                addr_text = cells[2].get_text(strip=True)
-                prof.adresse = addr_text
-                cp_match = re.search(r"(\d{4})\s+(\w+)", addr_text)
+            # Statut — cells[1]
+            if len(cells) > 1:
+                status_text = cells[1].get_text(strip=True)
+                prof.statut = status_text
+
+            # Adresse — cells[5]
+            if len(cells) > 5:
+                addr_cell = cells[5]
+                addr_parts = []
+                for content in addr_cell.children:
+                    if getattr(content, "name", None) == "br":
+                        continue
+                    text = content.get_text(strip=True) if hasattr(content, "get_text") else str(content).strip()
+                    text = text.replace("\xa0", " ").strip()
+                    if text:
+                        addr_parts.append(text)
+
+                if addr_parts:
+                    prof.adresse = ", ".join(addr_parts)
+
+                addr_text = addr_cell.get_text(" ", strip=True).replace("\xa0", " ")
+                cp_match = re.search(r"\b(\d{4})\s+([A-Za-zÀ-ÿ\-]+(?:\s+[A-Za-zÀ-ÿ\-]+)*)", addr_text)
                 if cp_match:
                     prof.code_postal = cp_match.group(1)
-                    prof.ville = cp_match.group(2)
-
-            # Statut
-            if len(cells) > 3:
-                prof.statut = cells[3].get_text(strip=True)
+                    prof.ville = cp_match.group(2).strip()
 
             return prof
 

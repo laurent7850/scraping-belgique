@@ -151,6 +151,29 @@ professionCustom.addEventListener('input', () => {
     }
 });
 
+// Location warning for BE NACE searches
+function updateLocationWarning() {
+    const warning = document.getElementById('location-warning');
+    if (!warning) return;
+
+    const profSelect = document.getElementById('profession-be');
+    const ville = document.getElementById('ville').value.trim();
+    const regionSelectId = selectedCountry === 'FR' ? 'province-fr' : 'province-be';
+    const province = document.getElementById(regionSelectId).value;
+    const hasLocation = ville || province;
+    const hasNaceProfession = selectedCountry === 'BE' && profSelect.value && !professionCustom.value.trim();
+
+    warning.classList.toggle('d-none', !hasNaceProfession || hasLocation);
+}
+
+document.getElementById('profession-be').addEventListener('change', updateLocationWarning);
+document.getElementById('ville').addEventListener('input', updateLocationWarning);
+document.getElementById('province-be').addEventListener('change', updateLocationWarning);
+professionCustom.addEventListener('input', updateLocationWarning);
+document.querySelectorAll('.country-btn').forEach(btn => {
+    btn.addEventListener('click', () => setTimeout(updateLocationWarning, 0));
+});
+
 // Form submit
 searchForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -260,20 +283,12 @@ async function startSearch() {
     // Get location from active region select
     const ville = document.getElementById('ville').value.trim();
     const regionSelectId = selectedCountry === 'FR' ? 'province-fr' : 'province-be';
-    const region = document.getElementById(regionSelectId).value;
-    const location = ville || region;
+    const province = document.getElementById(regionSelectId).value;
 
     // Options
     const maxResults = parseInt(maxResultsSlider.value);
     const useEnrich = document.getElementById('use-enrich').checked;
     const useDeepEmail = document.getElementById('use-deep-email').checked;
-
-    // Build step indicators for selected country
-    buildStepIndicators();
-
-    // Reset UI
-    resetProgress();
-    showSection('progress');
 
     // Disable button
     btnSearch.disabled = true;
@@ -285,7 +300,9 @@ async function startSearch() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 profession,
-                location,
+                ville,
+                province,
+                location: ville || province,
                 max_results: maxResults,
                 use_enrich: useEnrich,
                 use_deep_email: useDeepEmail,
@@ -300,6 +317,12 @@ async function startSearch() {
         }
 
         currentJobId = data.job_id;
+
+        // Build step indicators for selected country
+        buildStepIndicators();
+        resetProgress();
+        showSection('progress');
+
         connectSSE(data.job_id);
 
     } catch (err) {

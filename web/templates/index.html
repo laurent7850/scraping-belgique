@@ -109,6 +109,15 @@
                             </div>
                         </div>
 
+                        <!-- Alerte localisation requise (BE, recherche par profession NACE) -->
+                        <div id="location-warning" class="alert alert-info small py-2 d-none">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>Lieu requis.</strong>
+                            La recherche par profession (code NACE) dans KBO n&eacute;cessite un lieu
+                            (ville, code postal ou province).
+                            Sans lieu, seules les entreprises dont le nom contient le mot-cl&eacute; seront trouv&eacute;es.
+                        </div>
+
                         <!-- Max r&eacute;sultats -->
                         <div class="mb-3">
                             <label for="max-results" class="form-label fw-semibold">
