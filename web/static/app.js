@@ -506,10 +506,74 @@ async function onJobCompleted(jobId, summary) {
         console.error('Failed to fetch results:', err);
     }
 
-    // Show results section after a short delay
+    // Auto-download CSV
+    setTimeout(() => {
+        window.location.href = `/api/download/${jobId}`;
+    }, 500);
+
+    // Show results section + completion popup
     setTimeout(() => {
         showSection('results');
+        const stats = summary.stats || {};
+        showCompletionPopup(stats);
     }, 1000);
+}
+
+function showCompletionPopup(stats) {
+    const total = stats.total || 0;
+    const phone = stats.with_phone || 0;
+    const email = stats.with_email || 0;
+    const website = stats.with_website || 0;
+
+    let modal = document.getElementById('completion-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'completion-modal';
+        modal.className = 'modal fade';
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title"><i class="bi bi-check-circle me-2"></i>Recherche terminée</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="completion-body"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                            <i class="bi bi-check-lg me-1"></i> OK
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    document.getElementById('completion-body').innerHTML = `
+        <p class="mb-3">Le fichier CSV a été téléchargé automatiquement.</p>
+        <div class="row text-center g-3">
+            <div class="col-3">
+                <div class="fs-3 fw-bold text-primary">${total}</div>
+                <small class="text-muted">Résultats</small>
+            </div>
+            <div class="col-3">
+                <div class="fs-3 fw-bold text-success">${phone}</div>
+                <small class="text-muted">Téléphones</small>
+            </div>
+            <div class="col-3">
+                <div class="fs-3 fw-bold text-info">${email}</div>
+                <small class="text-muted">Emails</small>
+            </div>
+            <div class="col-3">
+                <div class="fs-3 fw-bold text-warning">${website}</div>
+                <small class="text-muted">Sites web</small>
+            </div>
+        </div>
+    `;
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
 }
 
 // ============================================================
