@@ -66,11 +66,21 @@ cd /docker/scraping-belgique && docker compose restart
 
 ### Fonctionnement du container
 Au démarrage, le container :
-1. Installe `curl` et `git`
-2. Si premier lancement : clone depuis GitHub
+1. Installe `git`
+2. Si premier lancement : `git clone -b main` depuis GitHub
 3. Sinon : `git pull origin main` (récupère les dernières modifications)
 4. `pip install` des dépendances
 5. Lance `python -m web.app`
+
+### Commandes SSH vers le VPS — règles obligatoires
+**Incident du 05/11/2026 :** deux `docker logs` lancés par SSH sans timeout serveur sont restés orphelins 24h sur le VPS après que le client SSH a été tué par le timeout outil. `dockerd` a atteint 201% CPU en relisant les logs supprimés en boucle.
+
+**Règles à suivre systématiquement :**
+- **Toujours `timeout` côté serveur** : `ssh rampa 'timeout 20 docker logs --tail 50 <conteneur>'`, jamais un `docker logs` nu
+- **Jamais `-f`** (follow) dans un `docker logs` à distance
+- **Toujours `--since`** pour borner : `timeout 20 docker logs --since 5m --tail 100 <conteneur>`
+- **Options SSH de garde** : `-o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2`
+- **Préférer Git Bash** avec heredoc pour les commandes SSH complexes, pas PowerShell avec guillemets imbriqués
 
 ## Sources de données
 | Source | Usage | Rate limit |
